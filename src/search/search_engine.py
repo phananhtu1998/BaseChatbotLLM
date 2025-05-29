@@ -54,26 +54,26 @@ def search_similar(query_text, top_k=SEARCH_TOP_K):
             "bool": {
                 "should": [
                     {
-                        "knn": {
+                        "knn": { #Semantic
                             "embedding": {
-                                "vector": query_embedding,
-                                "k": top_k
+                                "vector": query_embedding, # vector của câu hỏi từ người dùng
+                                "k": top_k   #số lượng kết quả tương tự nhất cần tìm
                             }
                         }
                     },
                     {
-                        "match": {
+                        "match": {  #Dùng full-text search (tokenized) để tìm tài liệu có chứa các từ trong processed_query
                             "text": {
                                 "query": processed_query,
-                                "boost": 0.5
+                                "boost": 0.5  #làm cho trọng số của điều kiện này thấp hơn (ít ảnh hưởng hơn đến scoring)
                             }
                         }
                     },
                     {
-                        "match_phrase": {
+                        "match_phrase": { #Tìm cụm từ chính xác giống như truy vấn.
                             "text": {
                                 "query": processed_query,
-                                "boost": 1.0
+                                "boost": 1.0  # cao hơn match → ưu tiên tài liệu chứa cụm từ nguyên văn hơn là rải rác.
                             }
                         }
                     }
