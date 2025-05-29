@@ -12,6 +12,24 @@ conda create -n embedding python=3.10
 conda activate embedding
 ```
 
+**Cài đặt các gói python**
+
+```
+pip install -r requirement.langchain.txt
+```
+
+**Đi đến đường dẫn vừa clone source code**
+
+```
+cd /path/to/your/project
+```
+
+**Chạy file**
+
+```
+python embedding.py
+```
+
 
 
 # Chatbot
@@ -38,4 +56,10 @@ cd /path/to/your/project
 
 ```
 pip install -r requirement.langchain.txt
+```
+
+**Chạy file**
+
+```
+python -m src.chat.chatbot
 ```
