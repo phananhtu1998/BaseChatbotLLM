@@ -1,10 +1,12 @@
 from typing import Annotated
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.chat_models import init_chat_model
 from src.search.search_engine import search_similar, rerank_docs
 from src.config.config import FINAL_TOP_K
+from src.tools.search_tools import SmartSearchTool
 
 # --- Định nghĩa State cho langgraph ---
 class State(TypedDict):
@@ -13,47 +15,38 @@ class State(TypedDict):
 # Initialize LLM
 llm = init_chat_model("google_genai:gemini-2.0-flash")
 
+# Initialize SmartSearchTool
+smart_search = SmartSearchTool(api_key="your_gemini_api_key")
+
+# Bind tools to LLM
+llm_with_tools = llm.bind_tools([smart_search])
+
 def chatbot(state: State):
-    user_message = state["messages"][-1].content
-    print(f"🤔 User query: {user_message}")
-
-    # Tìm kiếm văn bản liên quan
-    docs = search_similar(user_message, top_k=30)
-    print(f"📚 Docs found: {len(docs)}")
-    
-    if not docs:
-        return {"messages": [{"role": "assistant", "content": "Xin lỗi, tôi không tìm thấy thông tin liên quan trong dữ liệu."}]}
-    
-    # Rerank với thuật toán cải thiện
-    reranked_docs = rerank_docs(user_message, docs, top_k=10)
-    print(f"🏆 Top {len(reranked_docs)} reranked docs selected")
-    
-    # Lấy top 5 tài liệu để đưa vào prompt
-    selected_docs = reranked_docs[:5]
-
-    context = "\n---\n".join(selected_docs)
-    prompt = f"""
-    Dựa vào các tài liệu sau (mỗi dòng là một đoạn thông tin, có thể lặp, giữ nguyên thông tin thời gian, địa danh, tên tổ chức như trong tài liệu):
-
-    {context}
-
-    Hỏi: {user_message}
-
-    Trả lời chính xác và súc tích, bao gồm đầy đủ thông tin thời gian (bao gồm năm nếu có trong tài liệu), loại bỏ các ký tự đặc biệt (như gạch dưới) trong tên người hoặc tổ chức để đảm bảo câu trả lời tự nhiên và đúng ngữ pháp tiếng Việt, không suy đoán từ việc dữ liệu có thể lặp lại. Nếu thông tin được hỏi không có trong tài liệu, trả lời: "Dữ liệu này mình chưa có thông tin."
-    """
-
-    try:
-        response = llm.invoke([{"role": "user", "content": prompt}])
-        return {"messages": [response]}
-    except Exception as e:
-        print(f"❌ LLM error: {e}")
-        return {"messages": [{"role": "assistant", "content": "Xin lỗi, đã xảy ra lỗi khi xử lý câu hỏi của bạn."}]}
+    """Node xử lý chat và quyết định có sử dụng tool hay không"""
+    return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
 def create_chat_graph():
-    """Create and compile the chat graph"""
+    """Create and compile the chat graph with tools"""
+    # Create graph
     graph_builder = StateGraph(State)
+    
+    # Add chatbot node
     graph_builder.add_node("chatbot", chatbot)
-    graph_builder.add_edge(START, "chatbot")
+    
+    # Add tools node
+    tool_node = ToolNode(tools=[smart_search])
+    graph_builder.add_node("tools", tool_node)
+    
+    # Add conditional edges
+    graph_builder.add_conditional_edges(
+        "chatbot",
+        tools_condition,
+    )
+    
+    # Add edges
+    graph_builder.add_edge("tools", "chatbot")  # Return to chatbot after tool use
+    graph_builder.add_edge(START, "chatbot")    # Start with chatbot
+    
     return graph_builder.compile()
 
 def test_search():
