@@ -29,157 +29,74 @@ class SearchInterface:
         self.current_date = datetime.now().strftime("%d/%m/%Y")
         self.llm_training_cutoff = "tháng 6/2024"  # Thời điểm model được train đến
 
-    def search_google(self, query: str, max_results: int = 10) -> List[SearchResult]:
-        """Tìm kiếm với Google (cải thiện compatibility)."""
+    def search_bing(self, query: str, max_results: int = 10) -> List[SearchResult]:
+        """Tìm kiếm kết quả từ Bing (ổn định và dễ scrape)."""
         retries = 3
         backoff_factor = 5
-        
+
         for attempt in range(retries):
             try:
-                # Thêm delay ngẫu nhiên để tránh bị block
-                time.sleep(random.uniform(3, 6))
-                
-                # Encode query cho URL với các parameter tối ưu
+                time.sleep(random.uniform(2, 5))
                 encoded_query = quote_plus(query)
-                search_url = f"https://www.google.com/search?q={encoded_query}&num={max_results}&hl=en&lr=lang_en&safe=off"
-                
-                print(f"🌐 Đang tìm kiếm trên Google: {query}")
-                
-                # Headers cải thiện để giả lập browser thật
+                search_url = f"https://www.bing.com/search?q={encoded_query}&setLang=vi"
+
+                print(f"🌐 Đang tìm kiếm trên Bing: {query}")
+
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Cache-Control': 'max-age=0',
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    )
                 }
-                
-                # Gửi yêu cầu
-                response = requests.get(search_url, headers=headers, timeout=20)
+
+                response = requests.get(search_url, headers=headers, timeout=15)
                 response.raise_for_status()
-                
+
                 soup = BeautifulSoup(response.text, 'html.parser')
                 results = []
-                
-                # Multiple selectors cho Google search results
-                search_containers = []
-                
-                # Thử các selector khác nhau
-                selectors_to_try = [
-                    'div.g',
-                    'div.tF2Cxc',
-                    'div[data-ved]',
-                    '.g',
-                    '.tF2Cxc'
-                ]
-                
-                for selector in selectors_to_try:
-                    containers = soup.select(selector)
-                    if containers:
-                        search_containers = containers
-                        break
-                
-                if not search_containers:
-                    print("⚠️ Không tìm thấy container Google search results")
-                    # Fallback: tìm tất cả div có chứa link
-                    search_containers = soup.find_all('div', string=lambda text: text and 'http' in str(text))
-                
-                for container in search_containers[:max_results]:
+
+                result_blocks = soup.select("li.b_algo")
+
+                for block in result_blocks[:max_results]:
                     try:
-                        # Multiple strategies để lấy title và URL
-                        title = ""
-                        url = ""
-                        description = ""
-                        
-                        # Strategy 1: Tìm h3 tag
-                        h3_elem = container.find('h3')
-                        if h3_elem:
-                            title = h3_elem.get_text().strip()
-                            # Tìm parent link
-                            link_elem = h3_elem.find_parent('a')
-                            if link_elem:
-                                url = link_elem.get('href', '')
-                        
-                        # Strategy 2: Tìm link đầu tiên trong container
-                        if not url:
-                            link_elem = container.find('a', href=True)
-                            if link_elem:
-                                url = link_elem.get('href', '')
-                                if not title and link_elem.get_text().strip():
-                                    title = link_elem.get_text().strip()
-                        
-                        # Clean URL
-                        if url:
-                            if url.startswith('/url?q='):
-                                url = url.split('/url?q=')[1].split('&')[0]
-                            elif url.startswith('/search?') or url.startswith('#'):
-                                continue  # Skip internal Google links
-                        
-                        # Validate URL
-                        if not url or not url.startswith('http'):
+                        title_elem = block.find("h2")
+                        link_elem = title_elem.find("a") if title_elem else None
+                        desc_elem = block.find("p")
+
+                        if not link_elem or not link_elem.get("href", "").startswith("http"):
                             continue
-                        
-                        # Lấy description từ nhiều nguồn
-                        desc_selectors = [
-                            '.VwiC3b', '.s3v9rd', '.st', 'span[style*="-webkit-line-clamp"]',
-                            '.IsZvec', '.aCOpRe', '.BNeawe', 'div[data-content-feature="1"]'
-                        ]
-                        
-                        for selector in desc_selectors:
-                            desc_elem = container.select_one(selector)
-                            if desc_elem:
-                                description = desc_elem.get_text().strip()
-                                break
-                        
-                        # Fallback description
-                        if not description:
-                            text_content = container.get_text().strip()
-                            if len(text_content) > len(title) + 50:
-                                description = text_content[:200] + "..."
-                        
-                        if title and url:
-                            # Scrape nội dung từ URL
-                            content = self.scrape_content(url)
-                            
-                            search_result = SearchResult(
-                                title=title,
-                                url=url,
-                                description=description,
-                                content=content,
-                                source="Google"
-                            )
-                            results.append(search_result)
-                            
-                            print(f"✅ Google - Tìm thấy: {title}")
-                    
+
+                        title = title_elem.get_text().strip()
+                        url = link_elem["href"]
+                        description = desc_elem.get_text().strip() if desc_elem else ""
+
+                        content = self.scrape_content(url)
+
+                        results.append(SearchResult(
+                            title=title,
+                            url=url,
+                            description=description,
+                            content=content,
+                            source="Bing"
+                        ))
+                        print(f"✅ Bing - Tìm thấy: {title}")
+
                     except Exception as e:
-                        print(f"⚠️ Lỗi parse Google result: {e}")
+                        print(f"⚠️ Lỗi parse Bing result: {e}")
                         continue
-                
-                print(f"🔍 Google hoàn thành: {len(results)} kết quả")
+
+                print(f"🔍 Bing hoàn thành: {len(results)} kết quả")
                 return results
-            
-            except requests.exceptions.HTTPError as e:
-                if hasattr(e.response, 'status_code') and e.response.status_code == 429:
-                    print(f"⚠️ Google 429: Quá nhiều yêu cầu. Thử lại sau {backoff_factor * (2 ** attempt)} giây...")
-                    time.sleep(backoff_factor * (2 ** attempt))
-                else:
-                    print(f"❌ Lỗi Google HTTP: {e}")
-                    if attempt == retries - 1:
-                        return []
+
             except Exception as e:
-                print(f"❌ Lỗi Google search (attempt {attempt + 1}): {e}")
-                if attempt == retries - 1:
-                    return []
-                time.sleep(2)
-        
-        print("❌ Google search thất bại sau nhiều lần thử.")
+                print(f"❌ Lỗi Bing search: {e}")
+                time.sleep(backoff_factor * (2 ** attempt))
+
+        print("❌ Bing search thất bại sau nhiều lần thử.")
         return []
+
+
 
     def detect_time_sensitive_query(self, query: str) -> bool:
         """Phát hiện câu hỏi liên quan đến thời gian hiện tại."""
@@ -293,9 +210,9 @@ class SearchInterface:
         return []
 
     def search_combined(self, query: str, total_results: int = 10) -> List[SearchResult]:
-        """Kết hợp tìm kiếm từ Google và DuckDuckGo."""
+        """Kết hợp tìm kiếm từ Bing và DuckDuckGo."""
         print(f"\n🔍 Bắt đầu tìm kiếm kết hợp: '{query}'")
-        print("📊 Chiến lược: Google (5 kết quả) + DuckDuckGo (5 kết quả)")
+        print("📊 Chiến lược: Bing (5 kết quả) + DuckDuckGo (5 kết quả)")
         
         # Chia đều kết quả giữa 2 search engine
         results_per_engine = total_results // 2
@@ -303,11 +220,11 @@ class SearchInterface:
         all_results = []
         
         # Tìm kiếm song song (có thể tối ưu với threading sau)
-        google_results = self.search_google(query, max_results=results_per_engine)
+        ping_results = self.search_bing(query, max_results=results_per_engine)
         duckduckgo_results = self.search_duckduckgo(query, max_results=results_per_engine)
         
         # Kết hợp kết quả
-        all_results.extend(google_results)
+        all_results.extend(ping_results)
         all_results.extend(duckduckgo_results)
         
         # Loại bỏ duplicate URLs
@@ -374,7 +291,7 @@ class SearchInterface:
         print("🔍 HỆ THỐNG TÌM KIẾM THÔNG MINH VỚI GEMINI AI")
         print("=" * 60)
         print("💡 Chỉ cần nhập câu hỏi, hệ thống sẽ tự động:")
-        print("   • Tìm kiếm trên Google + DuckDuckGo")
+        print("   • Tìm kiếm trên Bing + DuckDuckGo")
         print("   • Kết hợp và loại bỏ trùng lặp")
         print("   • Sắp xếp kết quả theo độ liên quan với Reranker")
         print("   • Tạo câu trả lời thông minh với Gemini AI")
@@ -428,14 +345,14 @@ class SearchInterface:
             'timestamp': self.get_current_time()
         })
         
-        # Tìm kiếm kết hợp Google + DuckDuckGo
+        # Tìm kiếm kết hợp Bing + DuckDuckGo
         combined_results = self.search_combined(query, total_results=total_results)
         
         if not combined_results:
             print("❌ Không tìm thấy kết quả nào! Vui lòng thử lại sau.")
             return
             
-        print(f"✅ Tổng cộng tìm thấy {len(combined_results)} kết quả từ cả Google và DuckDuckGo")
+        print(f"✅ Tổng cộng tìm thấy {len(combined_results)} kết quả từ cả Bing và DuckDuckGo")
         
         # Rerank với hybrid method
         print("🔄 Đang sắp xếp lại kết quả theo độ liên quan với Reranker...")
@@ -456,7 +373,7 @@ class SearchInterface:
         if not ranked_results:
             return "Không tìm thấy thông tin liên quan."
         
-        context = "THÔNG TIN TÌM KIẾM (ĐÃ SẮP XẾP THEO ĐỘ LIÊN QUAN - GOOGLE + DUCKDUCKGO):\n\n"
+        context = "THÔNG TIN TÌM KIẾM (ĐÃ SẮP XẾP THEO ĐỘ LIÊN QUAN - BING + DUCKDUCKGO):\n\n"
         
         for i, ranked in enumerate(ranked_results, 1):
             result = ranked.original_result
@@ -476,7 +393,7 @@ class SearchInterface:
     def _generate_answer_with_gemini(self, query: str, search_context: str) -> str:
         """Gọi Gemini API để tạo câu trả lời với time context."""
         base_prompt = f"""
-Bạn là một trợ lý AI thông minh và hữu ích. Hãy trả lời câu hỏi dựa trên thông tin tìm kiếm được cung cấp từ Google và DuckDuckGo.
+Bạn là một trợ lý AI thông minh và hữu ích. Hãy trả lời câu hỏi dựa trên thông tin tìm kiếm được cung cấp từ Bing và DuckDuckGo.
 
 CÂU HỎI: {query}
 
@@ -485,7 +402,7 @@ CÂU HỎI: {query}
 HƯỚNG DẪN TRẢ LỜI:
 1. Trả lời trực tiếp và đầy đủ câu hỏi
 2. Sử dụng thông tin từ các nguồn đáng tin cậy (ưu tiên nguồn có điểm cao)
-3. Tổng hợp thông tin từ nhiều nguồn Google và DuckDuckGo để đưa ra câu trả lời toàn diện
+3. Tổng hợp thông tin từ nhiều nguồn Bing và DuckDuckGo để đưa ra câu trả lời toàn diện
 4. Đề cập nguồn thông tin khi cần thiết (ví dụ: "Theo nguồn 1..." hoặc "Các nghiên cứu cho thấy...")
 5. Nếu có thông tin mâu thuẫn giữa các nguồn, hãy chỉ ra và đưa ra quan điểm cân bằng
 6. Trả lời bằng tiếng Việt, rõ ràng và dễ hiểu
@@ -512,7 +429,7 @@ Câu trả lời:
         print("-"*70)
         
         # Hiển thị nguồn tham khảo với thông tin search engine
-        print("📚 Nguồn tham khảo (Google + DuckDuckGo):")
+        print("📚 Nguồn tham khảo (Bing + DuckDuckGo):")
         for i, ranked in enumerate(ranked_results, 1):
             result = ranked.original_result
             print(f"  {i}. [{result.source}] {result.title}")
@@ -544,7 +461,7 @@ Câu trả lời:
         print("🔹 Nhập 'history' hoặc 'lịch sử' để xem lịch sử")
         print("🔹 Nhập 'help' hoặc 'hướng dẫn' để xem hướng dẫn này")
         print("\n⚙️ Hệ thống tự động:")
-        print("• Tìm kiếm kết hợp trên Google + DuckDuckGo (mỗi engine 5 kết quả)")
+        print("• Tìm kiếm kết hợp trên Bing + DuckDuckGo (mỗi engine 5 kết quả)")
         print("• Loại bỏ URL trùng lặp giữa các search engine")
         print("• Scrape nội dung từ các trang web")
         print("• Sắp xếp kết quả theo độ liên quan (Hybrid Reranking)")
@@ -557,7 +474,7 @@ Câu trả lời:
         print("\n⚠️ Lưu ý:")
         print("• Hệ thống sử dụng web scraping, có thể chậm hơn API")
         print("• Tránh tìm kiếm quá nhiều lần liên tiếp để không bị chặn")
-        print("• Kết quả được kết hợp từ cả Google và DuckDuckGo")
+        print("• Kết quả được kết hợp từ cả Bing và DuckDuckGo")
 
     def get_current_time(self) -> str:
         """Lấy thời gian hiện tại."""
