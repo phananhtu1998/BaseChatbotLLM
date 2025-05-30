@@ -3,7 +3,7 @@
 **Tạo môi trường conda**
 
 ```
-conda create -n embedding python=3.10
+conda create -n embedding python=3.10 -y
 ```
 
 **Activate môi trường conda**
@@ -37,7 +37,7 @@ python embedding.py
 **Tạo môi trường conda**
 
 ```
-conda create -n chatbot python=3.10
+conda create -n chatbot python=3.10 -y
 ```
 
 **Activate môi trường conda**
