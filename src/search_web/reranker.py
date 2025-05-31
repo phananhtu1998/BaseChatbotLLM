@@ -96,7 +96,7 @@ class ContentReranker:
             vectorizer = TfidfVectorizer(
                 stop_words=list(self.stop_words_vi),
                 ngram_range=(1, 2),
-                max_features=1000
+                max_features=5000
             )
             
             tfidf_matrix = vectorizer.fit_transform(corpus)
@@ -116,7 +116,7 @@ class ContentReranker:
         
         if result.content:
             content_length = len(result.content)
-            if content_length > 1000:
+            if content_length > 5000:
                 score += 0.2
             elif content_length > 500:
                 score += 0.1
@@ -153,7 +153,10 @@ class ContentReranker:
             'github.com': 0.9,
             'medium.com': 0.85,
             'towardsdatascience.com': 0.85,
+            'baidu.com':0.9,
+            '.qq.com':0.97,
             '.edu': 0.9,
+            '.wiki':0.9,
             '.gov': 0.9,
             '.org': 0.8,
             '.com': 0.7,

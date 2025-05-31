@@ -38,7 +38,7 @@ class SearchInterface:
             try:
                 time.sleep(random.uniform(2, 5))
                 encoded_query = quote_plus(query)
-                search_url = f"https://www.bing.com/search?q={encoded_query}&setLang=vi"
+                search_url = f"https://www.bing.com/search?q={encoded_query}"
 
                 print(f"🌐 Đang tìm kiếm trên Bing: {query}")
 
@@ -391,26 +391,78 @@ class SearchInterface:
         return context
 
     def _generate_answer_with_gemini(self, query: str, search_context: str) -> str:
-        """Gọi Gemini API để tạo câu trả lời với time context."""
+        """Gọi Gemini API để tạo câu trả lời với khả năng nhận diện và trả lời bằng bất kỳ ngôn ngữ nào."""
+    
+    # Tạo prompt tổng quát cho mọi ngôn ngữ
         base_prompt = f"""
-Bạn là một trợ lý AI thông minh và hữu ích. Hãy trả lời câu hỏi dựa trên thông tin tìm kiếm được cung cấp từ Bing và DuckDuckGo.
+    Bạn là một trợ lý AI thông minh và đa ngôn ngữ. Hãy trả lời câu hỏi dựa trên thông tin tìm kiếm được cung cấp.
 
-CÂU HỎI: {query}
+    CÂU HỎI / QUESTION / 질문 / 質問 / PREGUNTA / QUESTION / FRAGE / DOMANDA / PERGUNTA / ВОПРОС / سؤال / प्रश्न / 問題:
+    {query}
 
-{search_context}
+    THÔNG TIN TÌM KIẾM / SEARCH CONTEXT / 검색 컨텍스트 / 検索コンテキスト / CONTEXTO DE BÚSQUEDA / CONTEXTE DE RECHERCHE / SUCHKONTEXT / CONTESTO DI RICERCA / CONTEXTO DE PESQUISA / КОНТЕКСТ ПОИСКА / سياق البحث / खोज संदर्भ:
+    {search_context}
 
-HƯỚNG DẪN TRẢ LỜI:
-1. Trả lời trực tiếp và đầy đủ câu hỏi
-2. Sử dụng thông tin từ các nguồn đáng tin cậy (ưu tiên nguồn có điểm cao)
-3. Tổng hợp thông tin từ nhiều nguồn Bing và DuckDuckGo để đưa ra câu trả lời toàn diện
-4. Đề cập nguồn thông tin khi cần thiết (ví dụ: "Theo nguồn 1..." hoặc "Các nghiên cứu cho thấy...")
-5. Nếu có thông tin mâu thuẫn giữa các nguồn, hãy chỉ ra và đưa ra quan điểm cân bằng
-6. Trả lời bằng tiếng Việt, rõ ràng và dễ hiểu
-7. Cấu trúc câu trả lời một cách logic và có tổ chức
-8. Nếu không có đủ thông tin để trả lời đầy đủ, hãy nói rõ điều này
+    HƯỚNG DẪN QUAN TRỌNG / CRITICAL INSTRUCTIONS / 중요한 지침 / 重要な指示 / INSTRUCCIONES CRÍTICAS / INSTRUCTIONS CRITIQUES / KRITISCHE ANWEISUNGEN / ISTRUZIONI CRITICHE / INSTRUÇÕES CRÍTICAS / КРИТИЧЕСКИЕ ИНСТРУКЦИИ / تعليمات هامة / महत्वपूर्ण निर्देश:
 
-Câu trả lời:
-"""
+    1. **NGÔN NGỮ TRẢ LỜI / RESPONSE LANGUAGE**: 
+    - Phát hiện ngôn ngữ chính của câu hỏi và TRẢ LỜI BẰNG CHÍNH XÁC NGÔN NGỮ ĐÓ
+    - Detect the primary language of the question and RESPOND IN EXACTLY THAT LANGUAGE
+    - 질문의 주요 언어를 감지하고 정확히 그 언어로 응답하세요
+    - 質問の主要言語を検出し、正確にその言語で回答してください
+    - Detecta el idioma principal de la pregunta y RESPONDE EXACTAMENTE EN ESE IDIOMA
+    - Détectez la langue principale de la question et RÉPONDEZ EXACTEMENT DANS CETTE LANGUE
+    - Erkenne die Hauptsprache der Frage und ANTWORTE GENAU IN DIESER SPRACHE
+    - Rileva la lingua principale della domanda e RISPONDI ESATTAMENTE IN QUELLA LINGUA
+    - Detecte o idioma principal da pergunta e RESPONDA EXATAMENTE NESSE IDIOMA
+    - Определите основной язык вопроса и ОТВЕЧАЙТЕ ТОЧНО НА ЭТОМ ЯЗЫКЕ
+    - اكتشف اللغة الأساسية للسؤال وأجب بالضبط بتلك اللغة
+    - प्रश्न की मुख्य भाषा का पता लगाएं और ठीक उसी भाषा में उत्तर दें
+
+    2. **PHÂN TÍCH VÀ TỔNG HỢP / ANALYSIS AND SYNTHESIS**:
+    - Phân tích tất cả các nguồn thông tin được cung cấp
+    - Tổng hợp thông tin từ nhiều nguồn để có cái nhìn toàn diện
+    - Ưu tiên thông tin từ các nguồn đáng tin cậy
+
+    3. **TRÍCH DẪN NGUỒN / SOURCE CITATION**:
+    - Trích dẫn nguồn khi đưa ra thông tin quan trọng
+    - Sử dụng format phù hợp với ngôn ngữ trả lời:
+        * Tiếng Việt: "Theo nguồn từ [tên nguồn]..."
+        * English: "According to [source name]..."
+        * 한국어: "[소스 이름]에 따르면..."
+        * 日本語: "[ソース名]によると..."
+        * Español: "Según [nombre de la fuente]..."
+        * Français: "Selon [nom de la source]..."
+        * Deutsch: "Laut [Quellenname]..."
+        * Italiano: "Secondo [nome della fonte]..."
+        * Português: "De acordo com [nome da fonte]..."
+        * Русский: "По данным [название источника]..."
+        * العربية: "وفقاً لـ [اسم المصدر]..."
+        * हिंदी: "[स्रोत नाम] के अनुसार..."
+
+    4. **XỬ LÝ THÔNG TIN MÂU THUẪN / HANDLING CONTRADICTORY INFORMATION**:
+    - Nếu có thông tin mâu thuẫn, hãy chỉ rõ và đưa ra phân tích cân bằng
+    - Trình bày các quan điểm khác nhau một cách khách quan
+
+    5. **CẤU TRÚC CÂU TRẢ LỜI / ANSWER STRUCTURE**:
+    - Trình bày câu trả lời có cấu trúc logic, dễ hiểu
+    - Sử dụng văn phong tự nhiên của ngôn ngữ đích
+    - Đảm bảo câu trả lời đầy đủ và trực tiếp
+
+    6. **TÍNH CHÍNH XÁC / ACCURACY**:
+    - Chỉ đưa ra thông tin có căn cứ từ các nguồn tìm kiếm
+    - Nếu thông tin không đầy đủ, hãy nói rõ điều đó
+    - Tránh đưa ra thông tin sai lệch hoặc không có căn cứ
+
+    7. **NGÔN NGỮ TỰ NHIÊN / NATURAL LANGUAGE**:
+    - Sử dụng ngữ pháp và từ vựng chính xác của ngôn ngữ đích
+    - Đảm bảo câu trả lời nghe tự nhiên như người bản ngữ
+    - Tôn trọng văn hóa và phong cách giao tiếp của ngôn ngữ đó
+
+    **LƯU Ý QUAN TRỌNG**: Đây là yêu cầu tuyệt đối - BẮT BUỘC phải trả lời bằng chính xác ngôn ngữ của câu hỏi. Không được trả lời bằng ngôn ngữ khác.
+
+    CÂU TRẢ LỜI / ANSWER / 답변 / 回答 / RESPUESTA / RÉPONSE / ANTWORT / RISPOSTA / RESPOSTA / ОТВЕТ / الإجابة / उत्तर:
+    """
         
         # Thêm time context nếu cần
         enhanced_prompt = self.add_time_context_to_prompt(base_prompt, query)
