@@ -28,7 +28,7 @@ def chatbot(state: State):
     reranked_docs = rerank_docs(user_message, docs, top_k=10)
     print(f"🏆 Top {len(reranked_docs)} reranked docs selected")
     
-    # Lấy top 5 tài liệu để đưa vào prompt
+    # Lấy top 10 tài liệu để đưa vào prompt
     selected_docs = reranked_docs[:10]
 
     context = "\n---\n".join(selected_docs)
