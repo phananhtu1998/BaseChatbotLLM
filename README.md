@@ -67,5 +67,5 @@ python -m src.chat.chatbot
 **Link fix lỗi vm.max_map_count trong docker khi chạy opensearch**
 
 ```
-https://stackoverflow.com/questions/42889241/how-to-increase-vm-max-map-count
+https://stackoverflow.com/questions/42111566/elasticsearch-in-windows-docker-image-vm-max-map-count
 ```
