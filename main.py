@@ -3,12 +3,64 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_tavily import TavilySearch
 import os
+import base64
+from PIL import Image
+import io
 
 # ✅ Thiết lập API Key cho Gemini
 os.environ["GOOGLE_API_KEY"] = "AIzaSyDFUKW4QZ0WeQw5_Bz9kbinynstDL8ayL0"  # thay bằng key của bạn
 search_with_tavily = TavilySearch(max_results=3, tavily_api_key="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")
 
-# ✅ Định nghĩa tool bằng tiếng Việt
+# ✅ Tool phân tích hình ảnh
+@tool
+def analyze_image(image_path: str, question: str = "") -> str:
+    """
+    Phân tích hình ảnh và trả lời câu hỏi về hình ảnh. 
+    Có thể mô tả nội dung, nhận diện đối tượng, đọc text trong ảnh, hoặc trả lời câu hỏi cụ thể về hình ảnh.
+    
+    Args:
+        image_path: Đường dẫn đến file hình ảnh
+        question: Câu hỏi cụ thể về hình ảnh (tùy chọn)
+    """
+    try:
+        # Kiểm tra file có tồn tại
+        if not os.path.exists(image_path):
+            return f"❌ Không tìm thấy file hình ảnh: {image_path}"
+        
+        # Đọc và encode hình ảnh
+        with open(image_path, "rb") as image_file:
+            image_data = image_file.read()
+            image_b64 = base64.b64encode(image_data).decode()
+        
+        # Tạo model với khả năng xử lý hình ảnh
+        vision_llm = init_chat_model("google_genai:gemini-2.0-flash", temperature=0)
+        
+        # Tạo prompt cho phân tích hình ảnh
+        if question:
+            prompt = f"Hãy phân tích hình ảnh này và trả lời câu hỏi: {question}"
+        else:
+            prompt = "Hãy mô tả chi tiết nội dung của hình ảnh này, bao gồm các đối tượng, màu sắc, hoạt động, và bất kỳ text nào có trong ảnh."
+        
+        # Tạo message với hình ảnh
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                }
+            ]
+        )
+        
+        # Gọi AI để phân tích
+        response = vision_llm.invoke([message])
+        
+        return f"[PHÂN TÍCH HÌNH ẢNH] {image_path}\n\n{response.content}"
+        
+    except Exception as e:
+        return f"❌ Lỗi khi phân tích hình ảnh: {str(e)}"
+
+# ✅ Tool tìm kiếm tài liệu nội bộ
 @tool
 def search_documents(query: str) -> str:
     """
@@ -17,6 +69,7 @@ def search_documents(query: str) -> str:
     """
     return f"[Tìm trong TÀI LIỆU NỘI BỘ] Đang tìm với truy vấn: {query}\n✅ Kết quả mô phỏng: Đã tìm thấy thông tin liên quan đến '{query}' trong hệ thống tài liệu nội bộ."
 
+# ✅ Tool tìm kiếm web
 @tool
 def search_web(query: str) -> str:
     """
@@ -62,22 +115,24 @@ def search_web(query: str) -> str:
 
 # ✅ Khởi tạo mô hình Gemini và gắn tools
 llm = init_chat_model("google_genai:gemini-2.0-flash", temperature=0)
-tools = [search_documents, search_web]
+tools = [search_documents, search_web, analyze_image]
 llm_with_tools = llm.bind_tools(tools)
 
 # ✅ Tạo dictionary để ánh xạ tên tool với function
 tool_map = {
     "search_documents": search_documents,
-    "search_web": search_web
+    "search_web": search_web,
+    "analyze_image": analyze_image
 }
 
-# ✅ System message cải thiện với hướng dẫn đa ngôn ngữ
+# ✅ System message cải thiện với hướng dẫn về hình ảnh
 system_message = SystemMessage(
     content="""
-Bạn là một trợ lý AI thông minh và đa ngôn ngữ. Bạn có 2 công cụ:
+Bạn là một trợ lý AI thông minh và đa ngôn ngữ. Bạn có 3 công cụ:
 
-- `search_web`: dùng để tìm tin tức công khai như giá vàng, người nổi tiếng, sự kiện, kiến thức phổ thông từ Internet.
-- `search_documents`: dùng để tìm thông tin nội bộ như nội quy công ty, chính sách công ty, báo cáo nội bộ.
+- search_web: dùng để tìm tin tức công khai như giá vàng, người nổi tiếng, sự kiện, kiến thức phổ thông từ Internet.
+- search_documents: dùng để tìm thông tin nội bộ như nội quy công ty, chính sách công ty, báo cáo nội bộ.
+- analyze_image: dùng để phân tích hình ảnh, mô tả nội dung, nhận diện đối tượng, đọc text trong ảnh, hoặc trả lời câu hỏi về hình ảnh.
 
 QUAN TRỌNG - Quy tắc trả lời:
 1. LUÔN trả lời bằng chính xác ngôn ngữ mà người dùng sử dụng trong câu hỏi
@@ -86,8 +141,14 @@ QUAN TRỌNG - Quy tắc trả lời:
 4. Nếu câu hỏi bằng ngôn ngữ khác → trả lời bằng ngôn ngữ đó
 
 Chọn công cụ phù hợp:
-- Câu hỏi về thông tin công khai (tin tức, người nổi tiếng, sự kiện) → `search_web`
-- Câu hỏi về thông tin nội bộ công ty → `search_documents`
+- Câu hỏi về thông tin công khai (tin tức, người nổi tiếng, sự kiện) → search_web
+- Câu hỏi về thông tin nội bộ công ty → search_documents
+- Câu hỏi về hình ảnh (mô tả, phân tích, đọc text) → analyze_image
+
+Đối với hình ảnh:
+- Khi người dùng đề cập đến file hình ảnh, hãy sử dụng analyze_image
+- Truyền đường dẫn file và câu hỏi cụ thể (nếu có)
+- Nếu không có câu hỏi cụ thể, hãy mô tả tổng quan hình ảnh
 
 Sau khi nhận được kết quả từ công cụ, hãy:
 - Tổng hợp thông tin một cách tự nhiên
@@ -96,8 +157,26 @@ Sau khi nhận được kết quả từ công cụ, hãy:
 """
 )
 
+# ✅ Hàm xử lý upload hình ảnh
+def handle_image_upload():
+    """Hướng dẫn người dùng upload hình ảnh"""
+    print("\n📸 Để phân tích hình ảnh, bạn có thể:")
+    print("1. Đặt file hình ảnh trong cùng thư mục với script này")
+    print("2. Nhập tên file (ví dụ: 'image.jpg', 'photo.png')")
+    print("3. Hoặc nhập đường dẫn đầy đủ (ví dụ: 'C:/Users/Desktop/image.jpg')")
+    print("4. Sau đó hỏi về hình ảnh: 'Phân tích file image.jpg' hoặc 'Hình ảnh này có gì?'")
+    print("\n💡 Ví dụ câu hỏi:")
+    print("- 'Mô tả hình ảnh trong file photo.jpg'")
+    print("- 'Đọc text in trong ảnh document.png'") 
+    print("- 'Phân tích màu sắc trong image.jpg'")
+    print("- 'Có bao nhiêu người trong ảnh family.jpg?'\n")
+
 # ✅ Vòng lặp nhập từ người dùng
-print("💬 Chatbot đa ngôn ngữ sẵn sàng. Gõ câu hỏi bằng bất kỳ ngôn ngữ nào và nhấn Enter. Nhấn Ctrl+C để thoát.\n")
+print("💬 Chatbot đa ngôn ngữ với phân tích hình ảnh sẵn sàng!")
+print("🔍 Có thể tìm kiếm web, tài liệu nội bộ, và phân tích hình ảnh")
+print("📝 Gõ câu hỏi bằng bất kỳ ngôn ngữ nào và nhấn Enter")
+print("📸 Gõ 'help image' để xem hướng dẫn upload hình ảnh")
+print("🚪 Nhấn Ctrl+C để thoát\n")
 
 try:
     while True:
@@ -105,6 +184,11 @@ try:
         if not query.strip():
             continue
             
+        # Kiểm tra lệnh help
+        if query.lower() in ['help image', 'help img', 'hướng dẫn ảnh']:
+            handle_image_upload()
+            continue
+        
         # Tạo conversation với system message và user message
         messages = [system_message, HumanMessage(content=query)]
         
@@ -124,7 +208,10 @@ try:
                 tool_args = tool_call['args']
                 tool_id = tool_call['id']
                 
-                print(f"⚙️  Đang tìm kiếm: {tool_args.get('query', 'N/A')}")
+                if tool_name == 'analyze_image':
+                    print(f"📸 Đang phân tích hình ảnh: {tool_args.get('image_path', 'N/A')}")
+                else:
+                    print(f"⚙️  Đang tìm kiếm: {tool_args.get('query', 'N/A')}")
                 
                 # Gọi tool function
                 if tool_name in tool_map:
@@ -142,7 +229,7 @@ try:
                         print(f"❌ Lỗi khi chạy tool {tool_name}: {e}")
                         tool_messages.append(
                             ToolMessage(
-                                content=f"Lỗi tìm kiếm: {str(e)}",
+                                content=f"Lỗi thực thi: {str(e)}",
                                 tool_call_id=tool_id
                             )
                         )
@@ -153,7 +240,7 @@ try:
                 final_response = llm_with_tools.invoke(messages)
                 print(f"🤖 Trợ lý: {final_response.content}\n")
             else:
-                print("🤖 Trợ lý: Không thể thực thi công cụ tìm kiếm.\n")
+                print("🤖 Trợ lý: Không thể thực thi công cụ.\n")
         else:
             # AI trả lời trực tiếp mà không cần tool
             print(f"🤖 Trợ lý: {response.content}\n")
