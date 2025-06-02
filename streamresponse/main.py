@@ -57,11 +57,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files (để serve HTML)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Mount static files (để serve HTML) - chỉ mount nếu thư mục tồn tại
+static_dir = "static"
+if os.path.exists(static_dir) and os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    logger.info("✅ Static files mounted successfully")
+else:
+    logger.warning(f"⚠️  Thư mục '{static_dir}' không tồn tại. Tạo thư mục này nếu bạn muốn serve static files.")
 
 # Khởi tạo Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = 'AIzaSyDFUKW4QZ0WeQw5_Bz9kbinynstDL8ayL0'
 if not GEMINI_API_KEY:
     logger.warning("⚠️  GEMINI_API_KEY chưa được set. Hãy set trong environment variables.")
     logger.info("💡 Cách set: export GEMINI_API_KEY='your-api-key'")
@@ -71,7 +76,7 @@ if GEMINI_API_KEY:
 
 class GeminiChatbot:
     def __init__(self):
-        self.model_name = "gemini-2.0-flash-exp"
+        self.model_name = "gemini-2.0-flash"
         self.generation_config = {
             "temperature": 0.7,
             "top_p": 0.8,
@@ -106,24 +111,24 @@ class GeminiChatbot:
         )
 
     async def stream_response(self, message: str, history: List[ChatMessage] = None):
-        """Stream response từ Gemini với real-time chunks"""
+        """Stream response từ Gemini với hiệu ứng đánh máy như ChatGPT"""
         try:
             model = self.get_model()
             
-            # Chuyển đổi history sang format Gemini
+            # Chuyển đổi lịch sử hội thoại sang định dạng Gemini
             gemini_history = []
             if history:
-                for msg in history[-10]:  # Giữ 10 tin nhắn gần nhất để tránh context quá dài
+                for msg in history[-10:]:  # Lấy 10 tin nhắn gần nhất
                     role = "user" if msg.role == "user" else "model"
                     gemini_history.append({
                         "role": role,
                         "parts": [{"text": msg.content}]
                     })
 
-            # Tạo chat session với history
+            # Bắt đầu phiên chat với Gemini
             chat = model.start_chat(history=gemini_history)
             
-            # Gọi Gemini API với streaming
+            # Gọi API với chế độ stream
             response = await asyncio.to_thread(
                 chat.send_message, 
                 message, 
@@ -132,44 +137,45 @@ class GeminiChatbot:
             
             full_response = ""
             chunk_count = 0
-            
-            # Stream từng chunk
+
+            # Duyệt từng chunk từ Gemini
             for chunk in response:
                 if chunk.text:
-                    chunk_text = chunk.text
-                    full_response += chunk_text
-                    chunk_count += 1
-                    
-                    # Gửi chunk data qua Server-Sent Events
-                    yield f"data: {json.dumps({
-                        'type': 'chunk',
-                        'content': chunk_text,
-                        'full_content': full_response,
-                        'chunk_id': chunk_count,
-                        'timestamp': datetime.now().isoformat()
-                    }, ensure_ascii=False)}\n\n"
-                    
-                    # Thêm delay nhỏ để tạo hiệu ứng streaming tự nhiên
-                    await asyncio.sleep(0.02)
-            
-            # Gửi signal hoàn thành
-            yield f"data: {json.dumps({
+                    for char in chunk.text:  # Stream từng ký tự
+                        full_response += char
+                        chunk_count += 1
+
+                        chunk_data = {
+                            'type': 'chunk',
+                            'content': char,
+                            'full_content': full_response,
+                            'chunk_id': chunk_count,
+                            'timestamp': datetime.now().isoformat()
+                        }
+
+                        yield f"data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n"
+                        await asyncio.sleep(0.015)  # Delay để mô phỏng hiệu ứng gõ chữ
+
+            # Gửi tín hiệu hoàn tất
+            done_data = {
                 'type': 'done',
                 'content': '',
                 'full_content': full_response,
                 'total_chunks': chunk_count,
                 'timestamp': datetime.now().isoformat()
-            }, ensure_ascii=False)}\n\n"
-            
+            }
+            yield f"data: {json.dumps(done_data, ensure_ascii=False)}\n\n"
+
             logger.info(f"✅ Stream completed: {chunk_count} chunks, {len(full_response)} chars")
-            
+        
         except Exception as e:
             logger.error(f"❌ Streaming error: {str(e)}")
-            yield f"data: {json.dumps({
+            error_data = {
                 'type': 'error',
                 'error': f'Lỗi khi kết nối với Gemini: {str(e)}',
                 'timestamp': datetime.now().isoformat()
-            }, ensure_ascii=False)}\n\n"
+            }
+            yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
 
     async def get_response(self, message: str, history: List[ChatMessage] = None):
         """Non-streaming response (backup method)"""
