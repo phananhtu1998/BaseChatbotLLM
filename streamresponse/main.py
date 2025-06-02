@@ -1,10 +1,10 @@
 # main.py - Backend FastAPI với Gemini 2.0 Flash
 # requirements.txt:
-# fastapi==0.104.1
-# uvicorn==0.24.0
-# google-generativeai==0.3.2
-# python-multipart==0.0.6
-# pydantic==2.5.0
+# fastapi
+# uvicorn
+# google-generativeai
+# python-multipart
+# pydantic
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
