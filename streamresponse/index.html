@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini 2.0 Flash Chatbot</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 1000px;
+            height: 80vh;
+            min-height: 600px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            animation: slideInUp 0.6s ease-out;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            position: relative;
+        }
+
+        .status-indicator {
+            position: absolute;
+            right: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 16px 20px;
+            border-radius: 20px;
+            word-wrap: break-word;
+            animation: slideIn 0.3s ease-out;
+            position: relative;
+            line-height: 1.6;
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background: white;
+            color: #1f2937;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .bot-message.streaming {
+            border-left: 4px solid #667eea;
+            animation: streamingGlow 2s infinite ease-in-out;
+        }
+
+        .bot-message strong {
+            color: #374151;
+            font-weight: 600;
+        }
+
+        .bot-message em {
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        .bot-message code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            color: #dc2626;
+        }
+
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 20px;
+            border: 1px solid #e5e7eb;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .typing-dot {
+            width: 10px;
+            height: 10px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        .typing-text {
+            color: #6b7280;
+            font-style: italic;
+        }
+
+        .chat-input-container {
+            padding: 24px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 16px 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+            resize: none;
+            min-height: 50px;
+            max-height: 150px;
+            font-family: inherit;
+        }
+
+        .chat-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .char-counter {
+            position: absolute;
+            bottom: -20px;
+            right: 10px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .send-button {
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            min-width: 100px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .send-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+            font-size: 18px;
+        }
+
+        .streaming-cursor {
+            animation: blink 1s infinite;
+            color: #667eea;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .chat-info {
+            padding: 16px 24px;
+            background: #f8fafc;
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .model-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .clear-chat {
+            background: none;
+            border: 1px solid #d1d5db;
+            color: #6b7280;
+            padding: 6px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .clear-chat:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+            border-left: 4px solid #dc2626;
+        }
+
+        /* Animations */
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(20px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+
+        @keyframes typing {
+            0%, 80%, 100% { 
+                transform: scale(0); 
+                opacity: 0.3; 
+            }
+            40% { 
+                transform: scale(1); 
+                opacity: 1; 
+            }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes streamingGlow {
+            0%, 100% { box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); }
+            50% { box-shadow: 0 4px 25px rgba(102, 126, 234, 0.3); }
+        }
+
+        /* Scrollbar styling */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .chat-container {
+                width: 100%;
+                height: 95vh;
+                border-radius: 16px;
+            }
+            
+            .chat-header {
+                padding: 16px;
+                font-size: 20px;
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .status-indicator {
+                position: static;
+                transform: none;
+            }
+            
+            .chat-messages {
+                padding: 16px;
+            }
+            
+            .chat-input-container {
+                padding: 16px;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .send-button {
+                width: 100%;
+            }
+
+            .chat-info {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+
+        /* Code blocks styling */
+        .code-block {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 8px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+
+        /* Message formatting */
+        .message-content {
+            white-space: pre-wrap;
+        }
+
+        .message-content h1, 
+        .message-content h2, 
+        .message-content h3 {
+            margin: 10px 0 8px 0;
+            font-weight: 600;
+        }
+
+        .message-content ul, 
+        .message-content ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .message-content li {
+            margin: 4px 0;
+        }
+
+        .message-content blockquote {
+            border-left: 4px solid #e5e7eb;
+            margin: 8px 0;
+            padding: 8px 16px;
+            background: #f9fafb;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>🧠 Gemini 2.0 Flash Chatbot</span>
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span id="statusText">Đang kết nối...</span>
+            </div>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot-message">
+                <div class="message-content">
+                    <strong>Xin chào! 👋</strong><br>
+                    Tôi là <em>Gemini 2.0 Flash</em> với khả năng streaming response. 
+                    Hãy hỏi tôi bất cứ điều gì bạn muốn biết! 🚀
+                </div>
+            </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+            <span class="typing-text">Gemini đang suy nghĩ...</span>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="input-wrapper">
+                <textarea 
+                    class="chat-input" 
+                    id="chatInput" 
+                    placeholder="Nhập câu hỏi cho Gemini..." 
+                    maxlength="4000"
+                    rows="1"></textarea>
+                <div class="char-counter">
+                    <span id="charCount">0</span>/4000
+                </div>
+            </div>
+            <button class="send-button" id="sendButton">
+                <span id="sendText">Gửi</span>
+                <span id="sendSpinner" class="spinner" style="display: none;">↻</span>
+            </button>
+        </div>
+        
+        <div class="chat-info">
+            <div class="model-info">
+                <span>🤖 Powered by <strong>Gemini 2.0 Flash</strong></span>
+                <span>• FastAPI • Stream Response</span>
+            </div>
+            <button class="clear-chat" onclick="clearChat()">
+                🗑️ Xóa chat
+            </button>
+        </div>
+    </div>
+
+    <script>
+        class GeminiChatbot {
+            constructor() {
+                this.chatHistory = [];
+                this.isStreaming = false;
+                this.apiUrl = window.location.origin;
+                this.currentStreamMessage = null;
+                
+                this.setupEventListeners();
+                this.checkAPIStatus();
+                this.setupAutoResize();
+                document.getElementById('chatInput').focus();
+            }
+
+            setupEventListeners() {
+                const input = document.getElementById('chatInput');
+                const button = document.getElementById('sendButton');
+
+                // Enter để gửi (Shift+Enter để xuống dòng)
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !this.isStreaming) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                // Character counter
+                input.addEventListener('input', () => {
+                    const charCount = input.value.length;
+                    document.getElementById('charCount').textContent = charCount;
+                    
+                    if (charCount > 3800) {
+                        document.getElementById('charCount').style.color = '#dc2626';
+                    } else {
+                        document.getElementById('charCount').style.color = '#9ca3af';
+                    }
+                });
+
+                button.addEventListener('click', () => {
+                    if (!this.isStreaming) {
+                        this.sendMessage();
+                    }
+                });
+            }
+
+            setupAutoResize() {
+                const textarea = document.getElementById('chatInput');
+                textarea.addEventListener('input', () => {
+                    textarea.style.height = 'auto';
+                    textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+                });
+            }
+
+            async checkAPIStatus() {
+                try {
+                    const response = await fetch(`${this.apiUrl}/api/health`);
+                    const data = await response.json();
+                    
+                    const statusText = document.getElementById('statusText');
+                    if (data.api_configured) {
+                        statusText.textContent = 'Sẵn sàng';
+                        statusText.style.color = '#10b981';
+                    } else {
+                        statusText.textContent = 'Chưa cấu hình API';
+                        statusText.style.color = '#f59e0b';
+                        this.showErrorMessage('⚠️ API chưa được cấu hình. Vui lòng set GEMINI_API_KEY trong environment.');
+                    }
+                } catch (error) {
+                    console.error('❌ Health check failed:', error);
+                    const statusText = document.getElementById('statusText');
+                    statusText.textContent = 'Lỗi kết nối';
+                    statusText.style.color = '#dc2626';
+                    this.showErrorMessage('❌ Không thể kết nối với server. Vui lòng kiểm tra lại.');
+                }
+            }
+
+            async sendMessage() {
+                const input = document.getElementById('chatInput');
+                const message = input.value.trim();
+                
+                if (!message || this.isStreaming) return;
+
+                // Thêm tin nhắn người dùng
+                this.addMessage(message, 'user');
+                this.chatHistory.push({
+                    role: 'user',
+                    content: message,
+                    timestamp: new Date().toISOString()
+                });
+
+                // Clear input và reset height
+                input.value = '';
+                input.style.height = 'auto';
+                document.getElementById('charCount').textContent = '0';
+
+                // Show typing indicator
+                this.showTyping();
+                this.setStreamingState(true);
+
+                try {
+                    await this.streamResponse(message);
+                } catch (error) {
+                    console.error('❌ Send message error:', error);
+                    this.showErrorMessage(`❌ Lỗi: ${error.message}`);
+                } finally {
+                    this.hideTyping();
+                    this.setStreamingState(false);
+                }
+            }
+
+            async streamResponse(message) {
+                const requestBody = {
+                    message: message,
+                    history: this.chatHistory.slice(-10), // Giữ 10 tin nhắn gần nhất
+                    temperature: 0.7,
+                    max_tokens: 2048
+                };
+
+                try {
+                    const response = await fetch(`${this.apiUrl}/api/chat/stream`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'text/event-stream',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP ${response.status}`);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    
+                    // Tạo message container cho bot response
+                    this.currentStreamMessage = this.createStreamMessage();
+                    
+                    let buffer = '';
+                    let fullContent = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        
+                        if (done) break;
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Giữ lại phần chưa hoàn chỉnh
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const eventData = JSON.parse(line.slice(5));
+                                    await this.handleStreamEvent(eventData);
+                                } catch (e) {
+                                    console.warn('❌ Parse event error:', e);
+                                }
+                            }
+                        }
+                    }
+
+                } catch (error) {
+                    console.error('❌ Stream error:', error);
+                    throw error;
+                }
+            }
+
+            async handleStreamEvent(eventData) {
+                switch (eventData.type) {
+                    case 'chunk':
+                        if (this.currentStreamMessage) {
+                            const content = this.currentStreamMessage.querySelector('.message-content');
+                            content.innerHTML = this.formatMessage(eventData.full_content) + 
+                                              '<span class="streaming-cursor">▊</span>';
+                            this.scrollToBottom();
+                        }
+                        break;
+
+                    case 'done':
+                        if (this.currentStreamMessage) {
+                            const content = this.currentStreamMessage.querySelector('.message-content');
+                            content.innerHTML = this.formatMessage(eventData.full_content);
+                            this.currentStreamMessage.classList.remove('streaming');
+                            
+                            // Thêm vào lịch sử
+                            this.chatHistory.push({
+                                role: 'assistant',
+                                content: eventData.full_content,
+                                timestamp: eventData.timestamp
+                            });
+                        }
+                        this.currentStreamMessage = null;
+                        this.scrollToBottom();
+                        break;
+
+                    case 'error':
+                        this.showErrorMessage(eventData.error);
+                        if (this.currentStreamMessage) {
+                            this.currentStreamMessage.remove();
+                            this.currentStreamMessage = null;
+                        }
+                        break;
+                }
+            }
+
+            createStreamMessage() {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message bot-message streaming';
+                messageDiv.innerHTML = '<div class="message-content"><span class="streaming-cursor">▊</span></div>';
+                
+                document.getElementById('chatMessages').appendChild(messageDiv);
+                this.scrollToBottom();
+                
+                return messageDiv;
+            }
+
+            addMessage(content, role) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${role}-message`;
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.innerHTML = role === 'user' ? this.escapeHtml(content) : this.formatMessage(content);
+                
+                messageDiv.appendChild(contentDiv);
+                document.getElementById('chatMessages').appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            formatMessage(content) {
+                // Basic markdown-like formatting
+                let formatted = this.escapeHtml(content);
+                
+                // Code blocks
+                formatted = formatted.replace(/```([\s\S]*?)```/g, '<div class="code-block">$1</div>');
+                
+                // Inline code
+                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+                
+                // Bold
+                formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                
+                // Italic
+                formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                
+                // Headers
+                formatted = formatted.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+                formatted = formatted.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+                formatted = formatted.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+                
+                // Lists
+                formatted = formatted.replace(/^\* (.*$)/gm, '<li>$1</li>');
+                formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+                
+                return formatted;
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            showTyping() {
+                document.getElementById('typingIndicator').style.display = 'flex';
+                this.scrollToBottom();
+            }
+
+            hideTyping() {
+                document.getElementById('typingIndicator').style.display = 'none';
+            }
+
+            setStreamingState(isStreaming) {
+                this.isStreaming = isStreaming;
+                const sendButton = document.getElementById('sendButton');
+                const sendText = document.getElementById('sendText');
+                const sendSpinner = document.getElementById('sendSpinner');
+                const chatInput = document.getElementById('chatInput');
+
+                if (isStreaming) {
+                    sendButton.disabled = true;
+                    sendText.style.display = 'none';
+                    sendSpinner.style.display = 'inline';
+                    chatInput.disabled = true;
+                } else {
+                    sendButton.disabled = false;
+                    sendText.style.display = 'inline';
+                    sendSpinner.style.display = 'none';
+                    chatInput.disabled = false;
+                    chatInput.focus();
+                }
+            }
+
+            showErrorMessage(message) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message bot-message error-message';
+                messageDiv.innerHTML = `<div class="message-content">${this.escapeHtml(message)}</div>`;
+                
+                document.getElementById('chatMessages').appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            scrollToBottom() {
+                const chatMessages = document.getElementById('chatMessages');
+                setTimeout(() => {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }, 50);
+            }
+
+            clearHistory() {
+                this.chatHistory = [];
+                const chatMessages = document.getElementById('chatMessages');
+                chatMessages.innerHTML = `
+                    <div class="message bot-message">
+                        <div class="message-content">
+                            <strong>Xin chào! 👋</strong><br>
+                            Tôi là <em>Gemini 2.0 Flash</em> với khả năng streaming response. 
+                            Hãy hỏi tôi bất cứ điều gì bạn muốn biết! 🚀
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Global functions
+        function clearChat() {
+            if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử chat?')) {
+                window.chatbot.clearHistory();
+            }
+        }
+
+        // Initialize chatbot when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.chatbot = new GeminiChatbot();
+        });
+
+        // Handle page visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                window.chatbot?.checkAPIStatus();
+            }
+        });
+    </script>
+</body>
+</html>
