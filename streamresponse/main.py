@@ -110,24 +110,12 @@ class GeminiChatbot:
             safety_settings=self.safety_settings
         )
 
-    async def stream_response(self, message: str, history: List[ChatMessage] = None):
+    async def stream_response(self, message: str):
         """Stream response từ Gemini với hiệu ứng đánh máy như ChatGPT"""
         try:
             model = self.get_model()
-            
-            # Chuyển đổi lịch sử hội thoại sang định dạng Gemini
-            gemini_history = []
-            if history:
-                for msg in history[-10:]:  # Lấy 10 tin nhắn gần nhất
-                    role = "user" if msg.role == "user" else "model"
-                    gemini_history.append({
-                        "role": role,
-                        "parts": [{"text": msg.content}]
-                    })
-
             # Bắt đầu phiên chat với Gemini
-            chat = model.start_chat(history=gemini_history)
-            
+            chat = model.start_chat()
             # Gọi API với chế độ stream
             response = await asyncio.to_thread(
                 chat.send_message, 
@@ -177,24 +165,12 @@ class GeminiChatbot:
             }
             yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
 
-    async def get_response(self, message: str, history: List[ChatMessage] = None):
+    async def get_response(self, message: str):
         """Non-streaming response (backup method)"""
         try:
             model = self.get_model()
-            
-            # Chuyển đổi history
-            gemini_history = []
-            if history:
-                for msg in history[-10]:
-                    role = "user" if msg.role == "user" else "model"
-                    gemini_history.append({
-                        "role": role,
-                        "parts": [{"text": msg.content}]
-                    })
-
-            chat = model.start_chat(history=gemini_history)
+            chat = model.start_chat()
             response = await asyncio.to_thread(chat.send_message, message)
-            
             return response.text
             
         except Exception as e:
@@ -240,7 +216,7 @@ async def stream_chat(request: ChatRequest):
     logger.info(f"🚀 Starting stream for message: {request.message[:50]}...")
     
     return StreamingResponse(
-        chatbot.stream_response(request.message, request.history),
+        chatbot.stream_response(request.message),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
