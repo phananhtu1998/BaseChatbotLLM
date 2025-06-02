@@ -204,7 +204,7 @@ async def stream_chat(request: ChatRequest):
     Request body:
     - message: Tin nhắn người dùng
     - history: Lịch sử chat (optional)
-    - model: Model name (optional, default: gemini-2.0-flash-exp)
+    - model: Model name (optional, default: gemini-2.0-flash)
     - temperature: Độ sáng tạo 0-1 (optional, default: 0.7)
     """
     if not GEMINI_API_KEY:
