@@ -253,7 +253,7 @@ async def health_check():
     return {
         "status": "healthy" if GEMINI_API_KEY else "warning",
         "timestamp": datetime.now().isoformat(),
-        "model": "gemini-2.0-flash-exp",
+        "model": "gemini-2.0-flash",
         "api_configured": bool(GEMINI_API_KEY),
         "message": "✅ API đang hoạt động bình thường" if GEMINI_API_KEY else "⚠️ Chưa cấu hình GEMINI_API_KEY"
     }
@@ -263,7 +263,7 @@ async def get_available_models():
     """Danh sách models có sẵn"""
     return {
         "available_models": [
-            "gemini-2.0-flash-exp",
+            "gemini-2.0-flash",
             "gemini-1.5-pro",
             "gemini-1.5-flash"
         ],
