@@ -243,7 +243,7 @@ async def chat(request: ChatRequest):
     
     return ChatResponse(
         response=response,
-        model=request.model or "gemini-2.0-flash-exp",
+        model=request.model or "gemini-2.0-flash",
         timestamp=datetime.now()
     )
 
