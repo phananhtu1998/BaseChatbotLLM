@@ -69,3 +69,9 @@ python -m src.chat.chatbot
 ```
 https://stackoverflow.com/questions/42111566/elasticsearch-in-windows-docker-image-vm-max-map-count
 ```
+
+**Chạy BE**
+
+```
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
