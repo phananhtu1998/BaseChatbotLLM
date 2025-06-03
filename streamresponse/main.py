@@ -32,7 +32,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: Optional[List[ChatMessage]] = []
-    model: Optional[str] = "gemini-2.0-flash-exp"
+    model: Optional[str] = "gemini-2.0-flash"
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 2048
 
