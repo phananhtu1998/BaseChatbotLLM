@@ -201,6 +201,8 @@ RULES:
 5. Với tiền tệ, format theo định dạng Việt Nam
 6. Sử dụng LIMIT 20 mặc định trừ khi hỏi cụ thể
 7. Với thống kê thời gian, ưu tiên đơn hàng đã shipped
+8. Khi so sánh chuỗi (như category, tên sản phẩm, trạng thái...), hãy dùng ILIKE hoặc LOWER(...) để không phân biệt chữ hoa/thường
+
 
 Câu hỏi: {user_question}
 
